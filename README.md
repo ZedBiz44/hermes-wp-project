@@ -21,7 +21,8 @@ WP AutoCare by Hermes is a $50/month WordPress maintenance offer where a custome
 
 ## Current Tracking
 
+- Project hub page: https://app.notion.com/p/38fa3e33d5818157bc44c9ef05b6a979
 - Main background page: https://app.notion.com/p/38fa3e33d581804e97c5c7b297d292b0
 - Technical journal entry: https://app.notion.com/p/38fa3e33d5818181b499ed0120f65321
 - Current project tracking note: docs/tracking/hermes-hackathon/2026-06-30-wp-autocare-background.md
-
+- Current Notion project page review: docs/tracking/hermes-hackathon/2026-06-30-notion-project-page-review.md
