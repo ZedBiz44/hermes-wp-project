@@ -1,79 +1,99 @@
 # WP AutoCare Skill
 
 ## Purpose
-This skill enables the Hermes agent to perform automated WordPress maintenance tasks via the WordPress REST API. It checks for available updates, applies safe updates, and generates a plain-English report.
 
-## Authentication
-WordPress Application Passwords are used for authentication (available in WordPress 5.6+). The customer provides:
-- `WP_SITE_URL`: The full URL of the WordPress site (e.g., https://example.com)
-- `WP_APP_PASSWORD`: The WordPress Application Password in the format `username:app-password`
+This skill enables the Hermes agent to perform automated WordPress maintenance tasks via the MCP-WP-Connect plugin. It reads site content, checks for available updates via the WordPress REST API, applies safe updates, and generates a plain-English maintenance report.
 
-These are passed as environment variables or via the task context. They are NEVER logged or included in any output.
+## Connection Method
 
-## Available Actions
+This skill uses the **MCP-WP-Connect plugin** (ZedBiz44/MCP-WP-Connect-Plugin) installed on the customer's WordPress site. Authentication is via a named Bearer token.
 
-### 1. Check for Updates
+The following environment variables are available in the container:
+
+- `WP_MCP_ENDPOINT`: The MCP endpoint URL (e.g., `https://deals7.com/wp-json/mcp/v1/http`)
+- `WP_MCP_BEARER_TOKEN`: The Bearer token for authentication
+- `WP_SITE_URL`: The base URL of the WordPress site
+
+These are NEVER logged or included in any output.
+
+## How to Call the MCP Endpoint
+
+All calls use JSON-RPC 2.0 over HTTP POST:
+
 ```bash
-# Check available plugin updates
-curl -s -u "$WP_APP_PASSWORD" "$WP_SITE_URL/wp-json/wp/v2/plugins?status=inactive" \
-  -H "Content-Type: application/json"
-
-# Check available core update
-curl -s -u "$WP_APP_PASSWORD" "$WP_SITE_URL/wp-json/wp/v2/settings" \
-  -H "Content-Type: application/json"
-```
-
-### 2. List All Plugins with Update Status
-```bash
-curl -s -u "$WP_APP_PASSWORD" "$WP_SITE_URL/wp-json/wp/v2/plugins" \
-  -H "Content-Type: application/json" | python3 -c "
-import json, sys
-plugins = json.load(sys.stdin)
-for p in plugins:
-    name = p.get('name', 'Unknown')
-    version = p.get('version', 'N/A')
-    new_version = p.get('new_version', None)
-    status = p.get('status', 'unknown')
-    if new_version:
-        print(f'UPDATE AVAILABLE: {name} {version} -> {new_version}')
-    else:
-        print(f'UP TO DATE: {name} {version} ({status})')
-"
-```
-
-### 3. Apply a Plugin Update
-```bash
-# Update a specific plugin (replace PLUGIN_SLUG with actual slug)
-curl -s -X PUT -u "$WP_APP_PASSWORD" "$WP_SITE_URL/wp-json/wp/v2/plugins/PLUGIN_SLUG" \
+curl -s -X POST "$WP_MCP_ENDPOINT" \
+  -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"status": "active"}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-### 4. Generate Update Report
-After running checks, generate a plain-English report summarizing:
-- Total plugins checked
-- Updates applied successfully
-- Updates skipped (with reason)
-- Any errors encountered
-- Next scheduled maintenance date
+## Available Tools (via MCP-WP-Connect)
 
-## Safety Rules
-- NEVER apply updates to plugins flagged as "must-use" or "drop-in"
-- NEVER apply updates if the site is in maintenance mode
-- ALWAYS check for known conflict patterns before applying updates
-- If a premium plugin shows a license error (HTTP 402), flag it for the stripe-link-cli skill to handle
-- NEVER store or log WP_APP_PASSWORD in any output, file, or report
+Call `tools/list` to get the current list. Standard tools include:
 
-## Integration with Stripe Skills
-If a plugin update fails with a license/payment error:
-1. Flag the plugin name and error in the report
-2. Invoke the `stripe-link-cli` skill with the purchase URL
-3. Wait for human approval via Stripe Link mobile app
-4. Retry the update after successful payment
+- `wp_posts_read` — Read posts
+- `wp_pages_read` — Read pages
+- `wp_users_read` — Read users
+- `wp_media_read` — Read media
+- `wp_comments_read` — Read comments
+- `wp_taxonomies_read` — Read taxonomies
 
-## Example Task Prompt
+Write tools (when read-only mode is disabled):
+- `wp_posts_create`, `wp_posts_update`, `wp_posts_delete`
+- `wp_pages_create`, `wp_pages_update`, `wp_pages_delete`
+
+## Calling a Tool
+
+```bash
+curl -s -X POST "$WP_MCP_ENDPOINT" \
+  -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "wp_posts_read",
+      "arguments": {"limit": 5, "status": "publish"}
+    }
+  }'
 ```
-Using the WP AutoCare skill, check for all available updates on the WordPress site at $WP_SITE_URL.
-Apply all safe updates. Skip any that require license renewal and flag them for stripe-link-cli.
-Generate a plain-English report of what was done and email it to the customer.
+
+## WordPress Update Check (via WP REST API)
+
+For plugin update checking, use the standard WP REST API in addition to MCP-WP-Connect. The update check requires admin authentication via Application Password:
+
+```bash
+# List all plugins and their update status
+curl -s -u "$WP_APP_USER:$WP_APP_PASSWORD" "$WP_SITE_URL/wp-json/wp/v2/plugins" \
+  -H "Content-Type: application/json"
 ```
+
+Look for plugins where `new_version` is not null — those have updates available.
+
+## Maintenance Report Format
+
+After running the update check, generate a report in this format:
+
+```
+WP AutoCare Report — [Site URL]
+Date: [Date]
+
+UPDATES APPLIED:
+- [Plugin Name]: [old version] → [new version]
+
+UPDATES SKIPPED (conflict risk):
+- [Plugin Name]: [reason]
+
+UP TO DATE:
+- [count] plugins are current
+
+NEXT SCHEDULED CHECK: [date]
+```
+
+## Security Notes
+
+- Bearer tokens are hashed server-side — the plugin never stores the raw token
+- Each token is named and scoped (read vs read/write, per category)
+- Tokens can be revoked from the WP Dashboard > Settings > MCP-WP-Connect at any time
+- Never include token values in logs, reports, or any output
