@@ -1,0 +1,18 @@
+# Hermes config.yaml template for WP AutoCare
+# Deployed to: /opt/hermes-ruby/config.yaml on Ruby VPS3
+# Last updated: 2026-06-30 by Manus
+
+model:
+  base_url: https://inference-api.nousresearch.com/v1
+  default: nvidia/nemotron-3-ultra-550b-a55b
+  provider: nous
+
+providers: {}
+fallback_providers: []
+credential_pool_strategies: {}
+
+toolsets:
+  - hermes-cli
+
+agent:
+  name: Ruby
