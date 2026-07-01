@@ -179,3 +179,28 @@ Changes made:
 Core recommendation captured:
 
 > WP AutoCare should be positioned as a real subscription business loop: customer subscribes, connects WordPress, Hermes uses MCP-WP-Connect to perform controlled maintenance, Nemotron checks risk, Stripe/GHL handles the commercial flow, and the customer receives a plain-English care report.
+
+## Follow-Up: Manus Feedback Incorporated
+
+Date: 2026-06-30
+Agent: Cody
+Status: Completed
+
+The `WP AutoCare - Other Project Review` Notion page was updated again after Manus reviewed the submission/video guidance.
+
+Updated page:
+
+- https://app.notion.com/p/38fa3e33d58180d9972ad4f69459a1f3
+
+Changes made:
+
+- Moved MCP-WP-Connect into the executive framing as the headline differentiator.
+- Added the "why now" angle: live ZedNow funnel, deals7.com connected, Hermes configured, and the care loop ready to demonstrate.
+- Added a sample WP AutoCare Weekly Report section as the customer-facing proof object.
+- Reworked the video outline so the main money shot is Hermes connecting live to WordPress through MCP-WP-Connect and producing/reporting the care result.
+- Reframed pricing as proof via Stripe/GHL checkout or product screens, not just as a static price list.
+- Added a short live proof screenshot checklist for the final submission/video.
+
+Core updated recommendation:
+
+> Lead with the reusable WordPress control layer, show the full subscription-to-care-report loop, and make the live Hermes-to-WordPress connection the centerpiece of the video.
