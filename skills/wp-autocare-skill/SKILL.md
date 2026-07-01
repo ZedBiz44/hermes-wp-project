@@ -1,6 +1,16 @@
-# WP AutoCare Skill v4
+# WP AutoCare Skill v5
 ## Purpose
 This skill enables Ruby to perform automated WordPress maintenance tasks via the MCP-WP-Connect plugin on the customer's WordPress site. Read, write, update, and delete WordPress content. Generate maintenance reports.
+
+## Human-Level Operating Rules
+Ruby must keep the conversation human-level. The user should be able to ask normal questions like "what drafts are there?" or "make a draft post" without seeing JSON, curl payloads, or low-level tool-call choices.
+
+- Do the WordPress calls internally.
+- Report results in plain English with the useful business fields: title, ID, status, modified date, and link.
+- Do not ask the user to choose between debugging calls unless the endpoint is genuinely blocked.
+- Do not tell the user a draft does not exist until checking both the draft list and the specific post ID when an ID is known.
+- If a post was just created, verify it by ID before reporting follow-up list results.
+- If a draft list unexpectedly returns empty after a successful draft create, treat that as a skill/query issue first, not as proof there are no drafts.
 
 ## CRITICAL: How to Use This Skill
 **You MUST use your terminal tool with direct `curl` commands.** Do NOT use the browser. Do NOT look for WP tools in your toolset -- they will not appear. Do NOT use Asana. Terminal only.
@@ -26,6 +36,10 @@ python3 -c "import json; d=json.load(open('/tmp/wp_tools.json')); print('Tools a
 ```
 
 ## Read Posts
+When the user asks for posts without specifying status, read both published and draft posts unless the wording clearly asks for only one status.
+
+Published posts:
+
 ```bash
 curl -s -X POST "$WP_MCP_ENDPOINT" \
   -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
@@ -34,6 +48,56 @@ curl -s -X POST "$WP_MCP_ENDPOINT" \
   -o /tmp/wp_result.json
 python3 -c "import json; d=json.load(open('/tmp/wp_result.json')); print(json.dumps(d['result'], indent=2))"
 ```
+
+Draft posts:
+
+```bash
+curl -s -X POST "$WP_MCP_ENDPOINT" \
+  -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"wp_posts_read","arguments":{"limit":20,"status":"draft","orderby":"modified","order":"DESC"}}}' \
+  -o /tmp/wp_drafts.json
+python3 - <<'PY'
+import json
+d=json.load(open('/tmp/wp_drafts.json'))
+result=d.get('result', {}).get('data') or d.get('result', {})
+items=result.get('items', [])
+print('Draft posts:', len(items))
+for p in items:
+    print(f"- {p.get('id')} | {p.get('status')} | {p.get('title')} | {p.get('modified')} | {p.get('link')}")
+PY
+```
+
+All statuses:
+
+```bash
+curl -s -X POST "$WP_MCP_ENDPOINT" \
+  -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"wp_posts_read","arguments":{"limit":20,"status":"any","orderby":"modified","order":"DESC"}}}' \
+  -o /tmp/wp_posts_any.json
+python3 - <<'PY'
+import json
+d=json.load(open('/tmp/wp_posts_any.json'))
+result=d.get('result', {}).get('data') or d.get('result', {})
+items=result.get('items', [])
+for p in items:
+    print(f"- {p.get('id')} | {p.get('status')} | {p.get('title')} | {p.get('modified')} | {p.get('link')}")
+PY
+```
+
+Read a specific post by ID:
+
+```bash
+curl -s -X POST "$WP_MCP_ENDPOINT" \
+  -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"wp_posts_read","arguments":{"id":POST_ID}}}' \
+  -o /tmp/wp_post_by_id.json
+python3 -c "import json; d=json.load(open('/tmp/wp_post_by_id.json')); print(json.dumps(d.get('result',{}).get('data') or d.get('result',{}), indent=2))"
+```
+
+Replace `POST_ID` before running the specific-ID command.
 
 ## Read Pages
 ```bash
@@ -46,6 +110,8 @@ python3 -c "import json; d=json.load(open('/tmp/wp_result.json')); print(json.du
 ```
 
 ## Create a Draft Post
+When creating a draft post, always verify the result by ID immediately after creation. If the user then asks what drafts exist, include the just-created draft if the direct ID read confirms it exists.
+
 ```bash
 curl -s -X POST "$WP_MCP_ENDPOINT" \
   -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
@@ -54,6 +120,23 @@ curl -s -X POST "$WP_MCP_ENDPOINT" \
   -o /tmp/wp_result.json
 python3 -c "import json; d=json.load(open('/tmp/wp_result.json')); print(json.dumps(d['result'], indent=2))"
 ```
+
+After creating, extract the returned ID and verify it:
+
+```bash
+python3 - <<'PY'
+import json
+d=json.load(open('/tmp/wp_result.json'))
+result=d.get('result', {}).get('data') or d.get('result', {})
+item=result.get('item') or {}
+post_id=result.get('id') or item.get('id')
+if not post_id:
+    raise SystemExit('No post ID returned; inspect /tmp/wp_result.json')
+print(post_id)
+PY
+```
+
+Then run the specific post-by-ID read command from the Read Posts section.
 
 ## Update a Post (by ID)
 Replace POST_ID with the actual numeric post ID:
@@ -95,6 +178,9 @@ If a security approval prompt appears, click **Always Allow**. These curl comman
 - 401 response: bearer token may be revoked -- notify Jack immediately
 - 404 response: plugin may be deactivated on the WP site
 - `error` key in JSON response: log the error code and message, do not retry blindly
+- If published posts read correctly but drafts return empty, immediately check `status:any` and direct post ID if available before reporting that no drafts exist.
+- If a write call creates a draft but the draft list is empty, report the verified post by ID and state that list reconciliation needs follow-up; do not claim there are zero drafts.
+- If the user asks "what drafts are there?", answer with the draft titles and IDs. Do not expose raw JSON.
 
 ## Maintenance Report Format
 ```
@@ -115,6 +201,7 @@ NEXT SCHEDULED CHECK: [date]
 ```
 
 ## Version History
+- v5: Adds human-level response rules, draft-post listing, status-any reconciliation, and direct-ID verification after draft creation (2026-07-01)
 - v1/v2: MCP client approach -- broken with Hermes (protocol mismatch)
 - v3: Direct curl with pipe to python3 -- triggered Tirith security approval
 - v4: Two-step curl (save to file, then parse) -- no security prompt (2026-07-01)
