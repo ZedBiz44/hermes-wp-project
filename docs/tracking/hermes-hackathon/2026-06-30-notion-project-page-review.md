@@ -153,3 +153,29 @@ Recommended fix:
 - Add Z-Knowledge Dashboard proof requirements.
 - Tighten wording around Stripe Billing vs Hermes Stripe skills.
 - Add the Stripe skill moment to the demo checklist.
+
+## Follow-Up: Other Project Review Cleanup
+
+Date: 2026-06-30
+Agent: Cody
+Status: Completed
+
+The Notion child page `Other Project Review` was corrected and refocused on WP AutoCare by Hermes.
+
+Updated page:
+
+- https://app.notion.com/p/38fa3e33d58180d9972ad4f69459a1f3
+
+Changes made:
+
+- Renamed the page to `WP AutoCare - Other Project Review`.
+- Removed the FarmFax-centered submission and video plan.
+- Reframed the other hackathon submissions as lessons for WP AutoCare.
+- Added WP AutoCare-specific submission positioning.
+- Added short submission copy and a strong closing line.
+- Added a practical video outline and shot list for Jack.
+- Kept FarmFax only as a narrow reporting-pattern example: evidence-based reports are useful.
+
+Core recommendation captured:
+
+> WP AutoCare should be positioned as a real subscription business loop: customer subscribes, connects WordPress, Hermes uses MCP-WP-Connect to perform controlled maintenance, Nemotron checks risk, Stripe/GHL handles the commercial flow, and the customer receives a plain-English care report.
