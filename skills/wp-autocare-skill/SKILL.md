@@ -1,50 +1,36 @@
-# WP AutoCare Skill
-
+# WP AutoCare Skill v3
 ## Purpose
+This skill enables Ruby to perform automated WordPress maintenance tasks via the MCP-WP-Connect plugin on the customer's WordPress site. It reads site content, checks for available updates, applies safe updates, and generates a plain-English maintenance report.
 
-This skill enables the Hermes agent to perform automated WordPress maintenance tasks via the MCP-WP-Connect plugin. It reads site content, checks for available updates via the WordPress REST API, applies safe updates, and generates a plain-English maintenance report.
+## Important: How This Works (Hermes vs OpenClaw)
+The MCP-WP-Connect plugin uses a **simplified JSON-RPC 2.0 protocol** (not the full MCP handshake). Hermes's built-in MCP client expects the full MCP protocol (`initialize` → `initialized` → `tools/list`), which the plugin does not support.
 
-## Connection Method
+**You MUST use direct `curl` calls via your terminal tool** -- do NOT attempt to use the MCP client or look for WP tools in your toolset. They will not appear there. Use the bash commands below instead.
 
-This skill uses the **MCP-WP-Connect plugin** (ZedBiz44/MCP-WP-Connect-Plugin) installed on the customer's WordPress site. Authentication is via a named Bearer token.
+## Credentials (Environment Variables)
+The following environment variables are pre-loaded in your container:
+- `WP_MCP_ENDPOINT` -- The JSON-RPC endpoint (e.g., `https://deals7.com/wp-json/mcp/v1/http`)
+- `WP_MCP_BEARER_TOKEN` -- Bearer token for authentication
+- `WP_SITE_URL` -- Base URL of the WordPress site
 
-The following environment variables are available in the container:
+**Never log, print, or include these values in any output or report.**
 
-- `WP_MCP_ENDPOINT`: The MCP endpoint URL (e.g., `https://deals7.com/wp-json/mcp/v1/http`)
-- `WP_MCP_BEARER_TOKEN`: The Bearer token for authentication
-- `WP_SITE_URL`: The base URL of the WordPress site
-
-These are NEVER logged or included in any output.
-
-## How to Call the MCP Endpoint
-
-All calls use JSON-RPC 2.0 over HTTP POST:
+## Step 1: List Available Tools
+Always start by listing available tools to confirm connection and see what is enabled for this token:
 
 ```bash
 curl -s -X POST "$WP_MCP_ENDPOINT" \
   -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); [print(t['name'],'-',t.get('description','')) for t in d['result']['tools']]"
 ```
 
-## Available Tools (via MCP-WP-Connect)
-
-Call `tools/list` to get the current list. Standard tools include:
-
-- `wp_posts_read` — Read posts
-- `wp_pages_read` — Read pages
-- `wp_users_read` — Read users
-- `wp_media_read` — Read media
-- `wp_comments_read` — Read comments
-- `wp_taxonomies_read` — Read taxonomies
-
-Write tools (when read-only mode is disabled):
-- `wp_posts_create`, `wp_posts_update`, `wp_posts_delete`
-- `wp_pages_create`, `wp_pages_update`, `wp_pages_delete`
-
-## Calling a Tool
+## Step 2: Call Any Tool
+Use `tools/call` with the tool name and arguments:
 
 ```bash
+# Read the 5 most recent published posts
 curl -s -X POST "$WP_MCP_ENDPOINT" \
   -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
   -H "Content-Type: application/json" \
@@ -56,31 +42,77 @@ curl -s -X POST "$WP_MCP_ENDPOINT" \
       "name": "wp_posts_read",
       "arguments": {"limit": 5, "status": "publish"}
     }
-  }'
+  }' | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['result'], indent=2))"
 ```
-
-## WordPress Update Check (via WP REST API)
-
-For plugin update checking, use the standard WP REST API in addition to MCP-WP-Connect. The update check requires admin authentication via Application Password:
 
 ```bash
-# List all plugins and their update status
-curl -s -u "$WP_APP_USER:$WP_APP_PASSWORD" "$WP_SITE_URL/wp-json/wp/v2/plugins" \
-  -H "Content-Type: application/json"
+# Read all pages
+curl -s -X POST "$WP_MCP_ENDPOINT" \
+  -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "wp_pages_read",
+      "arguments": {"limit": 20}
+    }
+  }' | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['result'], indent=2))"
 ```
 
-Look for plugins where `new_version` is not null — those have updates available.
+```bash
+# Create a new post (requires write token)
+curl -s -X POST "$WP_MCP_ENDPOINT" \
+  -H "Authorization: Bearer $WP_MCP_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+      "name": "wp_posts_create",
+      "arguments": {
+        "title": "My New Post",
+        "content": "Post content here.",
+        "status": "draft"
+      }
+    }
+  }' | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['result'], indent=2))"
+```
+
+## Available Tools (Standard Set -- 24 total)
+| Category | Tools |
+|---|---|
+| Posts | `wp_posts_create`, `wp_posts_read`, `wp_posts_update`, `wp_posts_delete` |
+| Pages | `wp_pages_create`, `wp_pages_read`, `wp_pages_update`, `wp_pages_delete` |
+| Media | `wp_media_create`, `wp_media_read`, `wp_media_update`, `wp_media_delete` |
+| Users | `wp_users_create`, `wp_users_read`, `wp_users_update`, `wp_users_delete` |
+| Comments | `wp_comments_create`, `wp_comments_read`, `wp_comments_update`, `wp_comments_delete` |
+| Taxonomies | `wp_taxonomies_create`, `wp_taxonomies_read`, `wp_taxonomies_update`, `wp_taxonomies_delete` |
+
+Write tools (`_create`, `_update`, `_delete`) only work if the token has write permissions. Always call `tools/list` first to confirm which tools are enabled for the current token.
+
+## WordPress Plugin Update Check (WP REST API)
+Plugin update checking uses the standard WP REST API with Application Password credentials (stored as `WP_APP_USER` and `WP_APP_PASSWORD` if configured):
+
+```bash
+# List all plugins and update status
+curl -s -u "$WP_APP_USER:$WP_APP_PASSWORD" \
+  "$WP_SITE_URL/wp-json/wp/v2/plugins" \
+  -H "Content-Type: application/json" \
+  | python3 -c "import json,sys; plugins=json.load(sys.stdin); [print(p['plugin'], p.get('version','?'), '-> UPDATE:', p.get('new_version','up to date')) for p in plugins]"
+```
 
 ## Maintenance Report Format
-
-After running the update check, generate a report in this format:
+After completing checks, generate a report in this format:
 
 ```
-WP AutoCare Report — [Site URL]
+WP AutoCare Report -- [Site URL]
 Date: [Date]
 
 UPDATES APPLIED:
-- [Plugin Name]: [old version] → [new version]
+- [Plugin Name]: [old version] -> [new version]
 
 UPDATES SKIPPED (conflict risk):
 - [Plugin Name]: [reason]
@@ -88,12 +120,19 @@ UPDATES SKIPPED (conflict risk):
 UP TO DATE:
 - [count] plugins are current
 
+CONTENT SUMMARY:
+- Posts: [count] published
+- Pages: [count] published
+
 NEXT SCHEDULED CHECK: [date]
 ```
 
-## Security Notes
+## Error Handling
+- If `curl` returns an error object (`"error"` key in response), log the error code and message
+- If the endpoint returns 401, the bearer token may have been revoked -- notify Jack immediately
+- If the endpoint returns 404, the plugin may have been deactivated on the WP site
 
-- Bearer tokens are hashed server-side — the plugin never stores the raw token
-- Each token is named and scoped (read vs read/write, per category)
-- Tokens can be revoked from the WP Dashboard > Settings > MCP-WP-Connect at any time
-- Never include token values in logs, reports, or any output
+## Version History
+- v1: Initial skill (MCP client approach -- broken with Hermes)
+- v2: Added env var injection (MCP client still broken)
+- v3: Switched to direct curl/JSON-RPC 2.0 calls -- bypasses Hermes MCP client entirely (2026-07-01)
